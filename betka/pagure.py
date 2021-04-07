@@ -31,6 +31,7 @@ from pathlib import Path
 from frambo.config import fetch_config
 from frambo.pagure import PAGURE_PORT
 from frambo.pagure import cfg_url
+from frambo.git import Git as FramboGit
 
 from betka.git import Git
 from betka.constants import DOWNSTREAM_CONFIG_FILE, SYNCHRONIZE_BRANCHES
@@ -187,15 +188,21 @@ class PagureAPI(object):
         )
         return comment_url
 
-    @property
-    def _full_url(self):
+    def full_url(self, fork=True) -> str:
         """
         Returns the full URL for the relevant repo image.
         :return: Full URL for image
         """
-        pagure_url = self.config_json["git_url_repo"]
+        pagure_url: str = self.config_json["git_url_repo"]
+        fork_empty = ""
+        pagure_user = ""
+        if fork:
+            fork_empty = "fork"
+            pagure_user = self.betka_config["pagure_user"]
+
         pagure_url = pagure_url.format(
-            user=self.betka_config["pagure_user"],
+            fork=fork_empty,
+            user=pagure_user,
             namespace=self.config_json["namespace_containers"],
             repo=self.image,
         )
@@ -220,9 +227,9 @@ class PagureAPI(object):
     def get_clone_url(self) -> str:
         return self.clone_url
 
-    def get_status_and_dict_from_request(self, url: str = None, msg: str = ""):
+    def get_status_and_dict_from_request(self, url: str = None, fork: bool = True, msg: str = ""):
         if not url:
-            url = self._full_url
+            url = self.full_url(fork=fork)
         f = requests.get(url + msg, verify=False)
         return f.status_code, f.json()
 
@@ -233,11 +240,13 @@ class PagureAPI(object):
                     Sometimes getting fork takes a bit longer.
         :return:
         """
-        logger.debug(f"get_fork(): {self._full_url} ")
+        logger.debug(f"get_fork(): {self.full_url()} ")
         for i in range(0, count):
-            (status_code, req) = self.get_status_and_dict_from_request(msg="urls")
+            (status_code, req) = self.get_status_and_dict_from_request(
+                msg="urls"
+            )
             if status_code == 400:
-                logger.warning("Unauthorized access to url %s", self._full_url)
+                logger.warning(f"Unauthorized access to url {self.full_url()}", )
                 return False
             if status_code == 200 and req:
                 logger.debug("response get_fork: %s", req)
@@ -246,7 +255,7 @@ class PagureAPI(object):
                 return True
             logger.info(
                 "Fork %s is not ready yet. Wait 2 more seconds. " "Status code %s ",
-                self._full_url,
+                self.full_url(),
                 status_code,
             )
             time.sleep(2)
@@ -290,6 +299,10 @@ class PagureAPI(object):
         :param downstream_dir:
         :return: list of valid branches
         """
+        master_branch = "master"
+        if "Fedora" == self.betka_config.get("downstream"):
+            master_branch = "main"
+
         branch_list = self._get_branches()
         valid_branches = []
         for brn in branch_list:
@@ -306,13 +319,16 @@ class PagureAPI(object):
         Gets all branches with bot-cfg.yml file
         """
         for i in range(0, 20):
-            (status_code, req) = self.get_status_and_dict_from_request(msg="branches")
+            (status_code, req) = self.get_status_and_dict_from_request(
+                fork=False,
+                msg="branches"
+            )
             if status_code == 200:
                 logger.debug(req)
                 # Remove master branch and private branches
                 return req["branches"]
             logger.info(
-                f"Status code for branches %s is %s", self._full_url, status_code
+                f"Status code for branches %s is %s", self.full_url(), status_code
             )
             time.sleep(2)
 

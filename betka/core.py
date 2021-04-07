@@ -104,6 +104,7 @@ class Betka(Bot):
         self.set_config_from_env("PROJECT")
         self.betka_config["pagure_api_token"] = os.environ[self.config_json["pagure_api_token"]]
         self.betka_config["new_api_version"] = bool(self.config_json["new_api_version"] == 'true')
+        self.betka_config["downstream"] = self.config_json["downstream"]
         betka_url_base = self.config_json["betka_url_base"]
         if getenv("DEPLOYMENT") == "prod":
             self.betka_config["betka_yaml_url"] = f"{betka_url_base}betka-prod.yaml"
